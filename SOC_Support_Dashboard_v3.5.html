@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Support Dashboard v3.5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: { colors: { brand: { primary: '#3b82f6', accent: '#10b981', danger: '#ef4444', warn: '#f59e0b' } } }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --brand-primary: #3b82f6; --brand-accent: #10b981; }
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.3s ease, color 0.3s ease; }
+        .dark body { background-color: #0f172a !important; color: #f1f5f9 !important; }
+        .bg-pattern { background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%236366f1' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+        
+        .tab-btn { @apply text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 whitespace-nowrap; }
+        .tab-btn.active { @apply bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-md ring-1 ring-slate-200 dark:ring-slate-700; }
+        
+        .card { border-top: 4px solid var(--brand-primary); @apply bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-0 border border-slate-200 dark:border-slate-700 transition-all duration-300 overflow-hidden flex flex-col; }
+        .card:hover { transform: translateY(-2px); border-top-color: var(--brand-accent); }
+        
+        .card-header { @apply bg-slate-50 dark:bg-slate-900/50 px-6 py-4 border-b border-slate-100 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-lg flex justify-between items-center; }
+        .card-body { @apply p-6 flex-1; }
+        
+        .dashboard-list a { @apply flex items-center p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-700 transition-all text-sm font-medium; }
+        
+        .notepad-widget { position: fixed; bottom: 20px; right: 20px; width: 380px; z-index: 1000; @apply shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all; }
+        .notepad-widget.minimized { height: 52px; width: 240px; }
+        
+        .event-badge { @apply inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide mr-2 min-w-[60px] text-center; }
+        .badge-malicious { @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded text-xs font-bold border border-red-200 dark:border-red-800; }
+        .ioc-chip { @apply inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-mono border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-100 transition-colors cursor-pointer; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 min-h-screen bg-pattern">
+
+    <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm sticky top-0 z-50 border-b border-slate-200 dark:border-slate-800">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col xl:flex-row justify-between items-center py-4 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                    <h1 class="text-xl font-bold dark:text-white uppercase tracking-tight tracking-widest">SOC Support <span class="text-indigo-600">Dashboard</span> <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2 align-middle border border-indigo-200">v3.5</span></h1>
+                </div>
+                <nav class="flex bg-slate-100 dark:bg-slate-800 rounded-2xl p-1.5 gap-1 shadow-inner overflow-x-auto max-w-full">
+                    <button onclick="switchTab('history-tab')" id="btn-history-tab" class="tab-btn active">History</button>
+                    <button onclick="switchTab('dashboard-tab')" id="btn-dashboard-tab" class="tab-btn">Resources</button>
+                    <button onclick="switchTab('triage-tab')" id="btn-triage-tab" class="tab-btn bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400">Bulk Triage</button>
+                    <button onclick="switchTab('siem-tab')" id="btn-siem-tab" class="tab-btn">SIEM Library</button>
+                    <button onclick="switchTab('network-tab')" id="btn-network-tab" class="tab-btn">Network</button>
+                    <button onclick="switchTab('file-tab')" id="btn-file-tab" class="tab-btn">File & Cloud</button>
+                    <button onclick="switchTab('cyberchef-tab')" id="btn-cyberchef-tab" class="tab-btn">CyberChef</button>
+                    <button onclick="switchTab('cheat-tab')" id="btn-cheat-tab" class="tab-btn">Cheatsheets</button>
+                    <button onclick="switchTab('settings-tab')" id="btn-settings-tab" class="tab-btn px-3 text-slate-400"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                </nav>
+                <button id="themeToggle" class="flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all font-semibold">
+                    <span id="themeIcon">🌙</span><span id="themeText">Dark Mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-8 max-w-7xl">
+        
+        <section id="history-tab" class="tab-content">
+            <div class="mb-8"><h2 class="text-3xl font-extrabold dark:text-white">History Analyzer</h2><p class="text-slate-600 dark:text-slate-400 mt-2">Analyze local SQLite browser history files with activity visualization.</p></div>
+            <div id="drop-zone" class="bg-white/90 dark:bg-slate-900/90 rounded-3xl shadow-xl p-10 border-2 border-dashed border-slate-200 dark:border-slate-700 text-center">
+                <div id="upload-section"><label for="db-upload" class="bg-indigo-600 text-white font-bold py-4 px-10 rounded-2xl hover:bg-indigo-700 cursor-pointer shadow-xl inline-block transition hover:scale-105">Choose SQLite File</label><input type="file" id="db-upload" class="hidden" accept=".db, .sqlite"></div>
+                <div id="data-section" class="hidden text-left mt-6">
+                    <div class="mb-8 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 h-64"><canvas id="activityChart"></canvas></div>
+                    <div class="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"><table class="w-full text-sm"><thead class="bg-slate-50 dark:bg-slate-800/50 text-xs font-bold uppercase text-slate-500"><tr><th class="px-6 py-4 w-16">#</th><th class="px-6 py-4">URL</th><th class="px-6 py-4">Title</th><th class="px-6 py-4 text-center">Visits</th><th class="px-6 py-4">Time (UTC)</th></tr></thead><tbody id="history-table-body" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody></table></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="dashboard-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">Security & Azure Certs</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://learn.microsoft.com/en-us/certifications/browse/?products=azure">Azure (SC-200/SC-100/AZ-900)</a></li><li><a href="https://offsec.com/courses-and-certifications/">OffSec (OSCP/SOC100)</a></li><li><a href="https://certifications.tcm-sec.com/">TCM (PNPT/PJPT)</a></li><li><a href="https://www.securityblue.team/">Blue Team Labs (BTL1/2)</a></li><li><a href="https://academy.hackthebox.com/">HTB Academy</a></li><li><a href="https://www.comptia.org/certifications">CompTIA (Sec+/Net+)</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">Threat Intel & Frameworks</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://attack.mitre.org/">MITRE ATT&CK Framework</a></li><li><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA KEV Catalog</a></li><li><a href="https://otx.alienvault.com/">AlienVault OTX</a></li><li><a href="https://isc.sans.edu/">SANS Internet Storm Center</a></li><li><a href="https://viz.greynoise.io/">GreyNoise Visualizer</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">Spam, Phishing & OSINT</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://urlscan.io/">URLScan / DNA</a></li><li><a href="https://haveibeenpwned.com/">Have I Been Pwned</a></li><li><a href="https://mxtoolbox.com/">MX Toolbox</a></li><li><a href="https://shodan.io/">Shodan / Censys</a></li><li><a href="https://abuse.ch/">Abuse.ch</a></li><li><a href="https://who.is/">WHOIS Lookup</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">Malware Analysis & Sandbox</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://app.any.run/">ANY.RUN Sandbox</a></li><li><a href="https://www.hybrid-analysis.com/">Hybrid Analysis</a></li><li><a href="https://tria.ge/">Triage (Hatching)</a></li><li><a href="https://bazaar.abuse.ch/">MalwareBazaar</a></li><li><a href="https://analyze.intezer.com/">Intezer Analyze</a></li><li><a href="https://virustotal.com/">VirusTotal</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">Living Off The Land (LotL)</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://lolbas-project.github.io/">LOLBAS (Windows)</a></li><li><a href="https://gtfobins.github.io/">GTFOBins (Linux)</a></li><li><a href="https://www.filesec.io/">FileSec.io (Binary Monitor)</a></li><li><a href="https://www.echotrail.io/">EchoTrail (Process Intel)</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">IR & Forensics</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://cyberchef.io/">CyberChef</a></li><li><a href="https://github.com/SigmaHQ/sigma">Sigma Rules (GitHub)</a></li><li><a href="https://github.com/securitytemplates/sectemplates">IR Templates</a></li><li><a href="https://github.com/SpecterOps/BloodHound/wiki">BloodHound</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">CyberChef Recipe Libraries</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://github.com/Neo23x0/cyber-chef-recipes">Neo23x0 Recipes (Florian Roth)</a></li><li><a href="https://github.com/mattnotmax/cyberchef-recipes">MattNotMax Recipes (Deobfuscation)</a></li><li><a href="https://github.com/kraven-security/CyberChef-recipes">Kraven Security Recipes</a></li><li><a href="https://gchq.github.io/CyberChef/">Official GCHQ CyberChef</a></li></ul></div></div>
+                <div class="card"><div class="card-header text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-sm">Azure & Purview Guidance</div><div class="card-body"><ul class="dashboard-list space-y-1"><li><a href="https://learn.microsoft.com/en-us/purview/audit-log-reference">M365 UAL Event Reference</a></li><li><a href="https://learn.microsoft.com/en-us/purview/audit-standard-setup">Search Purview Audit Logs</a></li><li><a href="https://learn.microsoft.com/en-us/azure/azure-monitor/logs/log-analytics-tutorial">Azure Log Analytics Guide</a></li><li><a href="https://learn.microsoft.com/en-us/purview/information-protection">M365 Information Protection</a></li><li><a href="https://learn.microsoft.com/en-us/azure/active-directory/reports-monitoring/overview-reports">Azure AD Reporting Guide</a></li></ul></div></div>
+            </div>
+        </section>
+
+        <section id="triage-tab" class="tab-content hidden">
+            <div class="card"><div class="card-header">Bulk IOC Extractor</div><div class="card-body">
+                <textarea id="bulkTriageInput" class="w-full h-48 p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm mb-4 outline-none font-mono focus:ring-2 focus:ring-indigo-500" placeholder="Paste raw text or firewall logs here..."></textarea>
+                <div class="flex gap-3 mb-8"><button onclick="extractIOCs()" class="bg-indigo-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition">Extract IOCs</button><button onclick="clearTriage()" class="bg-slate-200 dark:bg-slate-700 font-bold px-8 py-3 rounded-xl">Clear</button></div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 border-b pb-1 flex justify-between">IP Addresses <button onclick="copyChips('ipChips')" class="text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600">Copy All</button></h3>
+                        <span id="ipCount" class="text-xs text-indigo-500 font-mono mb-2 block">0 found</span>
+                        <div id="ipChips" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 border-b pb-1 flex justify-between">Hashes <button onclick="copyChips('hashChips')" class="text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600">Copy All</button></h3>
+                        <span id="hashCount" class="text-xs text-indigo-500 font-mono mb-2 block">0 found</span>
+                        <div id="hashChips" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 border-b pb-1 flex justify-between">Domains <button onclick="copyChips('domainChips')" class="text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600">Copy All</button></h3>
+                        <span id="domainCount" class="text-xs text-indigo-500 font-mono mb-2 block">0 found</span>
+                        <div id="domainChips" class="flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+            </div></div>
+        </section>
+
+        <section id="siem-tab" class="tab-content hidden">
+            <div class="card mb-8">
+                <div class="card-header">Universal Query Generator</div>
+                <div class="card-body">
+                    <div class="flex flex-col md:flex-row gap-3 mb-6">
+                        <input type="text" id="builderInput" class="flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 outline-none" placeholder="Enter IOC (e.g. 1.2.3.4 or Administrator)">
+                        <select id="builderType" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 outline-none font-bold text-indigo-600">
+                            <option value="ip">Source IP</option>
+                            <option value="user">User Account</option>
+                            <option value="hash">File Hash</option>
+                            <option value="domain">Domain/URL</option>
+                        </select>
+                        <button onclick="generateUniversalQuery()" class="bg-indigo-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition">Generate All</button>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="space-y-2"><label class="text-[10px] font-black uppercase text-indigo-500 ml-2">Splunk (SPL)</label><div class="relative group"><pre id="gen-spl" class="p-3 bg-slate-900 text-indigo-300 rounded-lg text-[10px] font-mono min-h-[44px] break-all">...</pre><button onclick="navigator.clipboard.writeText(document.getElementById('gen-spl').innerText)" class="absolute top-2 right-2 p-1 bg-slate-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity">📋</button></div></div>
+                        <div class="space-y-2"><label class="text-[10px] font-black uppercase text-indigo-500 ml-2">Sentinel (KQL)</label><div class="relative group"><pre id="gen-kql" class="p-3 bg-slate-900 text-indigo-300 rounded-lg text-[10px] font-mono min-h-[44px] break-all">...</pre><button onclick="navigator.clipboard.writeText(document.getElementById('gen-kql').innerText)" class="absolute top-2 right-2 p-1 bg-slate-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity">📋</button></div></div>
+                        <div class="space-y-2"><label class="text-[10px] font-black uppercase text-indigo-500 ml-2">Elastic (ES|QL)</label><div class="relative group"><pre id="gen-esql" class="p-3 bg-slate-900 text-indigo-300 rounded-lg text-[10px] font-mono min-h-[44px] break-all">...</pre><button onclick="navigator.clipboard.writeText(document.getElementById('gen-esql').innerText)" class="absolute top-2 right-2 p-1 bg-slate-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity">📋</button></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div><h2 class="text-3xl font-extrabold dark:text-white tracking-tight">SIEM Query Library</h2><p class="text-slate-600 dark:text-slate-400 mt-1">Cross-platform hunting queries with analysis guidance.</p></div>
+                <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shadow-inner border border-slate-200 dark:border-slate-700">
+                    <button onclick="setSIEMLang('spl')" id="lang-spl" class="px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-indigo-600 shadow-sm">SPL (Splunk)</button>
+                    <button onclick="setSIEMLang('kql')" id="lang-kql" class="px-4 py-2 rounded-lg text-xs font-bold transition-all">KQL (Sentinel)</button>
+                    <button onclick="setSIEMLang('esql')" id="lang-esql" class="px-4 py-2 rounded-lg text-xs font-bold transition-all">ES|QL (Elastic)</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="siemGrid"></div>
+        </section>
+
+        <section id="network-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="card lg:col-span-2">
+                    <div class="card-header flex justify-between items-center"><span id="ipHeaderTitle">IP Threat 360° (VirusTotal)</span><span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded vtBadge">Mock</span></div>
+                    <div class="card-body">
+                        <div class="flex gap-3 mb-6"><input type="text" id="ipInput" class="flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border outline-none" placeholder="Enter IP Address..."><button onclick="runIPLookup()" class="bg-indigo-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:bg-indigo-700 transition">Scan</button></div>
+                        <div id="mockIpResult" class="hidden"><div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"><div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border text-center"><div class="text-xs font-bold uppercase text-slate-500">Reputation</div><div class="text-2xl font-black mt-1 text-slate-800 dark:text-white" id="resRep">...</div></div><div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border text-center"><div class="text-xs font-bold uppercase text-slate-500">Classification</div><div class="text-lg font-bold mt-2 text-slate-800 dark:text-white" id="resClass">...</div></div><div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border text-center"><div class="text-xs font-bold uppercase text-slate-500">Location</div><div class="text-2xl mt-1 text-slate-800 dark:text-white" id="resLoc">...</div></div><div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border text-center"><div class="text-xs font-bold uppercase text-slate-500">Ports / Info</div><div class="text-sm font-mono mt-2 text-indigo-500" id="resPorts">-</div></div></div></div>
+                    </div>
+                </div>
+                <div class="card lg:col-span-2"><div class="card-header">Timezone Converter (UTC Input Only)</div><div class="card-body">
+                    <div class="flex flex-col md:flex-row gap-3 mb-6"><input type="time" id="utcInput" class="flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 outline-none"><button onclick="convertTimezones()" class="bg-indigo-600 text-white font-bold px-8 py-3 rounded-xl shadow-lg">Convert</button></div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-200"><table class="w-full text-xs text-left font-mono"><thead class="bg-slate-50 dark:bg-slate-900/50 uppercase text-slate-500"><tr><th class="p-3">Timezone Name</th><th class="p-3">Offset</th><th class="p-3">Calculated Time (12h)</th></tr></thead><tbody id="timezoneBody" class="divide-y divide-slate-100"></tbody></table></div>
+                </div></div>
+                <div class="card"><div class="card-header">CVE Check</div><div class="card-body"><div class="flex gap-2 mb-4"><input type="text" id="cveInput" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border" placeholder="CVE-2021-44228"><button onclick="mockCVELookup()" class="bg-indigo-600 text-white px-4 rounded-xl font-bold">Check</button></div><div id="cveResult" class="hidden p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border font-bold text-red-500">Log4Shell: CVSS 10.0 | YES</div></div></div>
+                <div class="card"><div class="card-header">Subnet Calculator</div><div class="card-body"><div class="flex gap-3 mb-4"><input type="text" id="cidrInput" class="flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border" placeholder="10.0.0.0/24"><button onclick="calcSubnet()" class="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl">Calc</button></div><div id="subnetResult" class="text-sm font-mono text-slate-600 dark:text-slate-300 min-h-[50px]">Results...</div></div></div>
+                <div class="card"><div class="card-header">Base64 & URL Toolbox</div><div class="card-body"><textarea id="codecInput" class="w-full h-24 p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border text-sm mb-4 font-mono outline-none"></textarea><div class="grid grid-cols-2 gap-3"><button onclick="handleCodec('b64d')" class="bg-indigo-600 text-white font-bold py-2 rounded-xl text-xs">B64 Decode</button><button onclick="handleCodec('b64e')" class="bg-brand-primary text-white font-bold py-2 rounded-xl text-xs">B64 Encode</button><button onclick="handleCodec('urld')" class="bg-slate-600 text-white font-bold py-2 rounded-xl text-xs">URL Decode</button><button onclick="handleCodec('urle')" class="bg-slate-500 text-white font-bold py-2 rounded-xl text-xs">URL Encode</button></div></div></div>
+                <div class="card"><div class="card-header">IOC Defanger</div><div class="card-body"><textarea id="defangInput" class="w-full h-24 p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border text-sm mb-4 font-mono outline-none"></textarea><div class="flex gap-3"><button onclick="handleDefang('defang')" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl">Defang</button><button onclick="handleDefang('refang')" class="flex-1 bg-slate-600 text-white font-bold py-3 rounded-xl">Refang</button></div></div></div>
+                <div class="card"><div class="card-header">Epoch Converter</div><div class="card-body"><div class="flex gap-3 mb-4"><input type="text" id="epochInput" class="flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border outline-none" placeholder="1715856000"><button onclick="convertEpoch()" class="bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl">Convert</button></div><div id="epochResult" class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm font-mono flex justify-center text-slate-500">UTC Time</div></div></div>
+                <div class="card text-sm"><div class="card-header">User Agent Parser</div><div class="card-body"><input type="text" id="uaInput" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border mb-4 outline-none" placeholder="Paste UA String..."><button onclick="parseUA()" class="w-full bg-indigo-600 text-white font-bold py-2 rounded-xl mb-4">Parse</button><div class="grid grid-cols-3 gap-4 text-center text-xs"><div class="p-2 bg-slate-50 dark:bg-slate-900 rounded border">Browser<div id="uaBrowser" class="font-bold text-indigo-500">-</div></div><div class="p-2 bg-slate-50 dark:bg-slate-900 rounded border">OS<div id="uaOS" class="font-bold text-indigo-500">-</div></div><div class="p-2 bg-slate-50 dark:bg-slate-900 rounded border">Device<div id="uaDevice" class="font-bold text-indigo-500">-</div></div></div></div></div>
+                <div class="card lg:col-span-2"><div class="card-header">Nmap XML Parser</div><div class="card-body"><div class="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 transition"><input type="file" id="nmap-upload" class="hidden" accept=".xml"><label for="nmap-upload" class="cursor-pointer text-indigo-600 font-bold hover:underline flex flex-col items-center"><span class="text-2xl mb-2">📂</span><span>Upload Nmap XML Output</span></label></div><div id="nmap-results" class="mt-6 overflow-x-auto hidden"><table class="w-full text-sm text-left border rounded-xl overflow-hidden"><thead class="bg-slate-100 dark:bg-slate-800 font-bold"><tr><th class="p-3 text-xs">IP</th><th class="p-3 text-xs">Port</th><th class="p-3 text-xs">Service</th><th class="p-3 text-xs">Product</th></tr></thead><tbody id="nmap-tbody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody></table></div></div></div>
+                <div class="card lg:col-span-2"><div class="card-header">Rapid Port Reference</div><div class="card-body"><input type="text" id="portSearch" oninput="searchPorts()" class="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border mb-4 outline-none" placeholder="Filter ports..."><div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2" id="portGrid"></div></div></div>
+            </div>
+        </section>
+
+        <section id="file-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="card lg:col-span-2"><div class="card-header">JSON/XML Prettifier</div><div class="card-body"><textarea id="formatInput" class="w-full h-32 p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border font-mono outline-none" placeholder="Paste data..."></textarea><div class="flex gap-3"><button onclick="formatData('json')" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-xl text-sm">Format JSON</button><button onclick="formatData('xml')" class="bg-slate-600 text-white font-bold py-2 px-6 rounded-xl text-sm">Format XML</button></div></div></div>
+                <div class="card"><div class="card-header flex justify-between"><span>Breach Check (HIBP)</span><span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hibpBadge">Mock</span></div><div class="card-body"><div class="flex gap-2 mb-4"><input type="text" id="emailInput" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border outline-none" placeholder="user@company.com"><button onclick="runEmailCheck()" class="bg-indigo-600 text-white px-4 rounded-xl font-bold shadow hover:bg-indigo-700 transition">Check</button></div><div id="emailResult" class="hidden space-y-2 text-xs"></div></div></div>
+                <div class="card"><div class="card-header flex justify-between"><span>Hash Reputation (VT)</span><span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded vtBadge">Mock</span></div><div class="card-body"><input type="text" id="hashInput" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border mb-4 outline-none font-mono text-sm" placeholder="Paste Hash..."><div class="flex gap-4 items-center"><div id="hashResult" class="flex-1 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-center font-bold text-indigo-500 border">Auto-Detect Type</div><button onclick="runHashRep()" class="bg-slate-200 dark:bg-slate-700 px-4 py-3 rounded-xl text-xs font-bold hover:bg-slate-300 transition">Check Rep</button></div><div id="hashResultContainer" class="hidden mt-4"></div></div></div>
+                <div class="card"><div class="card-header">Ransomware Lookup</div><div class="card-body"><input type="text" id="ransomInput" oninput="lookupRansom()" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border mb-4 outline-none" placeholder=".lockbit"><div id="ransomResult" class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl text-center font-bold text-red-500 border">No match</div></div></div>
+                <div class="card"><div class="card-header">Azure AD Errors</div><div class="card-body"><input type="text" id="azureInput" oninput="lookupAzure()" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border mb-4 outline-none" placeholder="50126"><div id="azureResult" class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl text-sm min-h-[50px] border">Description...</div></div></div>
+                <div class="card"><div class="card-header">Regex Builder</div><div class="card-body"><select id="regexSelect" onchange="showRegex()" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border mb-4 outline-none"><option value="">Select Pattern...</option><option value="email">Email</option><option value="ip">IP Address</option><option value="url">URL</option></select><code id="regexOutput" class="block p-3 bg-slate-900 text-green-400 rounded-xl text-xs font-mono break-all min-h-[50px]"></code></div></div>
+                <div class="card lg:col-span-2"><div class="card-header">JWT Decoder</div><div class="card-body"><textarea id="jwtInput" oninput="decodeJWT()" class="w-full h-24 p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border text-sm mb-4 font-mono outline-none" placeholder="Paste JSON Web Token..."></textarea><pre id="jwtResult" class="p-4 bg-slate-900 text-indigo-300 rounded-xl text-xs font-mono overflow-auto max-h-40">Decoded payload...</pre></div></div>
+            </div>
+        </section>
+
+        <section id="cyberchef-tab" class="tab-content hidden">
+            <div class="card h-[calc(100vh-15rem)] min-h-[600px] flex flex-col">
+                <div class="card-header"><span>CyberChef (Embedded)</span><button onclick="window.open('https://gchq.github.io/CyberChef/')" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded">Open ↗</button></div>
+                <iframe src="https://gchq.github.io/CyberChef/" class="w-full flex-1 border-0 rounded-b-2xl" title="CyberChef"></iframe>
+            </div>
+        </section>
+
+        <section id="cheat-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Windows Auth & Account</div><div class="card-body space-y-3 text-[11px] font-mono">
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">
+                        <span class="event-badge bg-indigo-100 text-indigo-700">4624</span> Logon Success <span class="block text-slate-400 mt-1 italic font-sans">- Check LogonType (3=Net, 10=RDP)</span>
+                    </div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">
+                        <span class="event-badge bg-red-100 text-red-700">4625</span> Logon Failed <span class="block text-slate-400 mt-1 italic font-sans">- Check Status 0xC000006D (Bad Pwd)</span>
+                    </div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">4740</span> Account Lockout</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">4728/32</span> Group Member Add/Remove</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">4768/71</span> Kerberos TGT Req/Fail</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-indigo-100 text-indigo-700">4672</span> Privileged Admin Logon</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-indigo-100 text-indigo-700">4720/26</span> User Created/Deleted</div>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Execution & Persistence</div><div class="card-body space-y-3 text-[11px] font-mono">
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">
+                        <span class="event-badge bg-indigo-100 text-indigo-700">4688</span> Process Create <span class="block text-slate-400 mt-1 italic font-sans">- Verify Parent Process Relationship</span>
+                    </div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">
+                        <span class="event-badge bg-indigo-100 text-indigo-700">4103/04</span> PowerShell Exec <span class="block text-slate-400 mt-1 italic font-sans">- Look for EncodedCommand or IEX</span>
+                    </div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">7045</span> Service Install</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">4698</span> Task Created</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">1102</span> Audit Log Cleared</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-red-100 text-red-700">4663</span> Object Access (File/Key)</div>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Sysmon Reference</div><div class="card-body space-y-3 text-[11px] font-mono">
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">
+                        <span class="event-badge bg-green-100 text-green-700">ID 1</span> Process Create <span class="block text-slate-400 mt-1 italic font-sans">- Check IntegrityLevel & ParentImage</span>
+                    </div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-green-100 text-green-700">ID 3</span> Network Conn</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-green-100 text-green-700">ID 11</span> File Create</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-green-100 text-green-700">ID 22</span> DNS Query</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-green-100 text-green-700">ID 8/10</span> Thread Injection</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border"><span class="event-badge bg-green-100 text-green-700">ID 13</span> Registry Value Set</div>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Linux Forensics (Triage)</div><div class="card-body space-y-2 text-[11px] font-mono">
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">netstat -antup <span class="text-slate-400 font-normal"># Check for non-standard ports</span></div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">lsof -i <span class="text-slate-400 font-normal"># List open network files</span></div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">ps -aux <span class="text-slate-400 font-normal"># Identify running processes</span></div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">last -f /var/log/wtmp <span class="text-slate-400 font-normal"># Check rapid login success</span></div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">crontab -l <span class="text-slate-400 font-normal"># Persistence via Cron</span></div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">find / -mtime -1 <span class="text-slate-400 font-normal"># Files modified < 24h</span></div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border text-indigo-600 font-bold">cat ~/.ssh/authorized_keys <span class="text-slate-400 font-normal"># Check new keys</span></div>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Web & SQL Indicators</div><div class="card-body space-y-2 text-[11px]">
+                    <div class="flex gap-2 mb-2"><span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold">200 OK</span><span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-bold">302 Redir</span><span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold">500 Err</span></div>
+                    <code class="block p-2 bg-slate-900 text-green-400 rounded">c99.php, shell.aspx, r57.php</code>
+                    <code class="block p-2 bg-slate-900 text-green-400 rounded">system($_GET['cmd']), eval(base64_decode)</code>
+                    <code class="block p-2 bg-slate-900 text-green-400 rounded">' OR 1=1; --, UNION SELECT NULL</code>
+                    <code class="block p-2 bg-slate-900 text-green-400 rounded">../etc/passwd, %2e%2e%2f%2e%2e%2f</code>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Ransomware TTPs</div><div class="card-body space-y-3 text-[11px]">
+                    <div><strong class="text-indigo-500">LockBit</strong><br><span class="text-slate-500">Exploit RDP/VPN, PsExec, StealBit exfil tool. Ext: .lockbit</span></div>
+                    <div><strong class="text-indigo-500">BlackCat (ALPHV)</strong><br><span class="text-slate-500">Malicious GPO, MegaSync for exfil, Rust-based. Ext: .alphv</span></div>
+                    <div><strong class="text-indigo-500">Play</strong><br><span class="text-slate-500">Valid accounts, Custom tool (Play.exe) for discovery. Ext: .play</span></div>
+                    <div><strong class="text-indigo-500">WannaCry</strong><br><span class="text-slate-500">EternalBlue (MS17-010) SMB Exploit. Ext: .wnry</span></div>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">Cloud & M365 (UAL) Events</div><div class="card-body space-y-2 text-[11px] font-mono">
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">UserLoggedIn / UserLoginFailed</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">New-InboxRule / Set-InboxRule</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">Set-Mailbox (Permissions Change)</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">Add-MailboxPermission (Delegate Access)</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">FileDownloaded / FileUploaded (SP/OD)</div>
+                    <div class="p-2 bg-slate-100 dark:bg-slate-900 rounded border">Add member to role (Priv Escalation)</div>
+                </div></div>
+                <div class="card"><div class="card-header text-sm font-black uppercase tracking-tight">File Magic Bytes</div><div class="card-body space-y-2 text-[11px] font-mono text-center">
+                    <div class="flex justify-between p-2 bg-slate-100 dark:bg-slate-900 rounded"><span>EXE/DLL</span><span class="font-bold text-indigo-500">4D 5A</span></div>
+                    <div class="flex justify-between p-2 bg-slate-100 dark:bg-slate-900 rounded"><span>ZIP/DOCX</span><span class="font-bold text-indigo-500">50 4B 03 04</span></div>
+                    <div class="flex justify-between p-2 bg-slate-100 dark:bg-slate-900 rounded"><span>JPG</span><span class="font-bold text-indigo-500">FF D8 FF</span></div>
+                    <div class="flex justify-between p-2 bg-slate-100 dark:bg-slate-900 rounded"><span>PNG</span><span class="font-bold text-indigo-500">89 50 4E 47</span></div>
+                    <div class="flex justify-between p-2 bg-slate-100 dark:bg-slate-900 rounded"><span>PDF</span><span class="font-bold text-indigo-500">25 50 44 46</span></div>
+                    <div class="flex justify-between p-2 bg-slate-100 dark:bg-slate-900 rounded"><span>7Z</span><span class="font-bold text-indigo-500">37 7A BC AF</span></div>
+                </div></div>
+            </div>
+        </section>
+
+        <section id="settings-tab" class="tab-content hidden">
+            <div class="card max-w-2xl mx-auto"><div class="card-header font-black">API Configurations</div><div class="card-body space-y-6">
+                <div class="p-4 bg-yellow-50 border-l-4 border-yellow-400 dark:bg-yellow-900/30 dark:border-yellow-600 rounded">
+                    <h3 class="text-sm font-bold text-yellow-800 dark:text-yellow-200">⚠️ Live API Integration Active</h3>
+                    <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">If keys are saved below, the Network and File tabs will attempt to fetch live data. If queries fail (due to CORS or invalid keys), the tools will gracefully fall back to displaying Mock Data.</p>
+                </div>
+                <div><label class="block text-sm font-bold mb-2">VirusTotal API Key</label><input type="password" id="vtKeyInput" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 outline-none"></div>
+                <div><label class="block text-sm font-bold mb-2">HaveIBeenPwned API Key</label><input type="password" id="hibpKeyInput" class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 outline-none"></div>
+                <div class="flex gap-4 pt-4"><button onclick="saveKeys()" class="bg-brand-primary text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:bg-brand-primary/80">Save Keys</button><button onclick="clearKeys()" class="bg-red-500 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition hover:bg-red-600">Clear All</button></div>
+            </div></div>
+        </section>
+
+    </main>
+
+    <div class="notepad-widget" id="notepadWidget">
+        <div class="bg-indigo-600 p-3.5 text-white font-bold flex justify-between items-center cursor-pointer select-none" id="notepadHeader"><span>📝 Scratchpad</span><span id="minimizeBtn">−</span></div>
+        <textarea id="scratchpad" class="w-full h-[300px] p-4 bg-slate-50 dark:bg-slate-900 dark:text-indigo-100 font-mono text-sm outline-none resize-none" placeholder="Paste IOCs..."></textarea>
+        <div class="bg-slate-100 dark:bg-slate-900 p-2 flex justify-end border-t dark:border-slate-700"><button onclick="exportNotes()" class="text-xs bg-slate-200 dark:bg-slate-700 px-3 py-1 rounded transition hover:bg-slate-300 dark:hover:bg-slate-600">Download MD</button></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+    <script>
+        // CORE NAVIGATION & THEME
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.getElementById('btn-' + tabId).classList.add('active');
+            localStorage.setItem('hubTab', tabId);
+        }
+        function setTheme(isDark) {
+            if (isDark) { document.documentElement.classList.add('dark'); localStorage.setItem('theme', 'dark'); }
+            else { document.documentElement.classList.remove('dark'); localStorage.setItem('theme', 'light'); }
+        }
+        document.getElementById('themeToggle').addEventListener('click', () => setTheme(!document.documentElement.classList.contains('dark')));
+        setTheme(localStorage.getItem('theme') === 'dark');
+        switchTab(localStorage.getItem('hubTab') || 'history-tab');
+
+        // SIEM BUILDER LOGIC (UNIVERSAL GENERATOR)
+        function generateUniversalQuery() {
+            const val = document.getElementById('builderInput').value;
+            const type = document.getElementById('builderType').value;
+            if(!val) return alert("Enter a value first.");
+            
+            let spl, kql, esql;
+            if(type === 'ip') {
+                spl = `index=network src_ip="${val}" OR dst_ip="${val}"`;
+                kql = `DeviceNetworkEvents | where RemoteIP == "${val}" or LocalIP == "${val}"`;
+                esql = `FROM network-events | WHERE source.ip == "${val}" OR destination.ip == "${val}"`;
+            } else if(type === 'user') {
+                spl = `index=security user="${val}"`;
+                kql = `SecurityEvent | where Account has "${val}"`;
+                esql = `FROM security-events | WHERE user.name == "${val}"`;
+            } else if(type === 'hash') {
+                spl = `index=endpoint (md5="${val}" OR sha256="${val}")`;
+                kql = `DeviceFileEvents | where MD5 == "${val}" or SHA256 == "${val}"`;
+                esql = `FROM process-events | WHERE file.hash.md5 == "${val}" OR file.hash.sha256 == "${val}"`;
+            } else {
+                spl = `index=network query="*${val}*"`;
+                kql = `DeviceNetworkEvents | where RemoteUrl contains "${val}"`;
+                esql = `FROM network-events | WHERE dns.question.name LIKE "*${val}*"`;
+            }
+            
+            document.getElementById('gen-spl').innerText = spl;
+            document.getElementById('gen-kql').innerText = kql;
+            document.getElementById('gen-esql').innerText = esql;
+        }
+
+        // SIEM LIBRARY DATA
+        let currentSIEMLang = 'spl';
+        const siemQueries = [
+            { title: "Inbox Rules (UAL)", desc: "Malicious forwarding rules. TIP: Look for 'Delete' or 'ForwardTo' external domains.", spl: 'index=m365 (Operation="New-InboxRule" OR Operation="Set-InboxRule") (Parameters="*Forward*" OR Parameters="*Delete*")', kql: 'OfficeActivity | where Operation in ("New-InboxRule", "Set-InboxRule") | where Parameters has_any ("Forward", "Delete")', esql: 'FROM logs-o365.audit-* | WHERE event.action IN ("New-InboxRule", "Set-InboxRule") AND (o365.audit.Parameters LIKE "*Forward*" OR o365.audit.Parameters LIKE "*Delete*")' },
+            { title: "External Access (UAL)", desc: "Non-owner mailbox access. TIP: Filter out authorized delegates.", spl: 'index=m365 Operation="MailboxLogin" LogonUserDisplayName!=OwnerDisplayName', kql: 'OfficeActivity | where Operation == "MailboxLogin" | where UserId != MailboxOwnerUPN', esql: 'FROM logs-o365.audit-* | WHERE event.action == "MailboxLogin" AND NOT o365.audit.UserId == o365.audit.MailboxOwnerUPN' },
+            { title: "Admin Changes (UAL)", desc: "Privileged role changes. TIP: Verify if this was a scheduled change.", spl: 'index=m365 Operation="Add member to role" Result="success"', kql: 'AuditLogs | where OperationName has "Add member to role" | where Result == "success"', esql: 'FROM logs-o365.audit-* | WHERE event.action == "Add member to role" AND event.outcome == "success"' },
+            { title: "Failed Logins", desc: "Brute force detection. TIP: Check if source IP is internal (misconfig) or external (attack).", spl: 'index=security EventCode=4625 | stats count by src_ip | where count > 10', kql: 'SecurityEvent | where EventID == 4625 | summarize count() by IpAddress | where count_ > 10', esql: 'FROM security-* | WHERE event.code == 4625 | STATS count = COUNT(*) BY source.ip | WHERE count > 10' },
+            { title: "Enc Powershell", desc: "Obfuscated PS commands. TIP: Decode Base64. Admin scripts sometimes use this.", spl: 'index=windows EventCode=4104 (CommandLine="*-enc*" OR CommandLine="*-EncodedCommand*")', kql: 'DeviceProcessEvents | where ProcessCommandLine contains "-enc" or ProcessCommandLine contains "-EncodedCommand"', esql: 'FROM process-events | WHERE process.name == "powershell.exe" AND process.command_line LIKE "*-enc*"' },
+            { title: "Cred Dumping", desc: "LSASS access. TIP: Check if the source process is a known security tool or unsigned binary.", spl: 'index=sysmon EventCode=10 TargetImage="*lsass.exe*" GrantedAccess="0x1ebfff"', kql: 'DeviceProcessEvents | where FileName == "lsass.exe" and (GrantedAccess == "0x1ebfff" or GrantedAccess == "0x1010")', esql: 'FROM sysmon-events | WHERE event.code == 10 AND process.target.name == "lsass.exe" AND winlog.event_data.GrantedAccess == "0x1ebfff"' }
+        ];
+
+        function setSIEMLang(lang) {
+            currentSIEMLang = lang;
+            document.querySelectorAll('#siem-tab button[id^="lang-"]').forEach(b => b.classList.remove('bg-white', 'dark:bg-slate-900', 'text-indigo-600', 'shadow-sm'));
+            document.getElementById('lang-' + lang).classList.add('bg-white', 'dark:bg-slate-900', 'text-indigo-600', 'shadow-sm');
+            renderSIEM();
+        }
+        function renderSIEM() {
+            document.getElementById('siemGrid').innerHTML = siemQueries.map(q => `<div class="card"><div class="card-header text-[10px] font-black uppercase tracking-widest text-indigo-500 border-none bg-transparent">${q.title}</div><div class="card-body"><p class="text-[10px] text-slate-500 mb-3 uppercase font-bold">${q.desc}</p><div class="relative group"><pre class="p-3 bg-slate-900 text-indigo-300 rounded-lg text-[10px] font-mono whitespace-pre-wrap min-h-[60px] border border-slate-800">${q[currentSIEMLang]}</pre><button onclick="navigator.clipboard.writeText('${q[currentSIEMLang]}')" class="absolute top-2 right-2 p-1 bg-slate-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity">📋</button></div></div></div>`).join('');
+        }
+        renderSIEM();
+
+        // TIMEZONE LOGIC
+        function convertTimezones() {
+            const inputVal = document.getElementById('utcInput').value; if (!inputVal) return alert("Select a time first.");
+            const [hours, minutes] = inputVal.split(':'); const baseDate = new Date(); baseDate.setUTCHours(hours, minutes, 0, 0);
+            const zones = [{ name: 'UTC (Z)', id: 'UTC' }, { name: 'PST / PDT (Los Angeles)', id: 'America/Los_Angeles' }, { name: 'CST / CDT (Chicago)', id: 'America/Chicago' }, { name: 'EST / EDT (New York)', id: 'America/New_York' }, { name: 'GMT / BST (London)', id: 'Europe/London' }, { name: 'CET / CEST (Berlin)', id: 'Europe/Berlin' }, { name: 'IST (India)', id: 'Asia/Kolkata' }, { name: 'JST (Tokyo)', id: 'Asia/Tokyo' }, { name: 'AEST / AEDT (Sydney)', id: 'Australia/Sydney' }];
+            document.getElementById('timezoneBody').innerHTML = zones.map(z => {
+                const timeStr = baseDate.toLocaleTimeString('en-US', { timeZone: z.id, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                const offset = new Intl.DateTimeFormat('en-GB', { timeZone: z.id, timeZoneName: 'shortOffset' }).formatToParts(baseDate).find(p => p.type === 'timeZoneName').value;
+                return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40"><td class="p-3 font-bold text-slate-700 dark:text-slate-300">${z.name}</td><td class="p-3 text-indigo-500 font-bold">${offset}</td><td class="p-3 font-black text-slate-800 dark:text-slate-100">${timeStr}</td></tr>`;
+            }).join('');
+        }
+
+        // TRIAGE & EXTRACTIONS
+        function extractIOCs() {
+            const text = document.getElementById('bulkTriageInput').value;
+            const ipRegex = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g;
+            const hashRegex = /\b[a-fA-F0-9]{32}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{64}\b/g;
+            const domainRegex = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b/gi;
+            const ips = [...new Set(text.match(ipRegex) || [])], hashes = [...new Set(text.match(hashRegex) || [])], domains = [...new Set(text.match(domainRegex) || [])];
+            renderChips('ipChips', ips, 'ipCount', 'network-tab', 'ipInput');
+            renderChips('hashChips', hashes, 'hashCount', 'file-tab', 'hashInput');
+            renderChips('domainChips', domains, 'domainCount', 'network-tab', 'ipInput');
+        }
+        function renderChips(containerId, items, countId, targetTab, targetInput) {
+            document.getElementById(countId).textContent = items.length + " found";
+            document.getElementById(containerId).innerHTML = items.map(item => `<div class="ioc-chip" onclick="document.getElementById('${targetInput}').value='${item}';switchTab('${targetTab}')">${item} ↗</div>`).join('');
+        }
+        function copyChips(containerId) {
+             const text = Array.from(document.getElementById(containerId).children).map(c => c.innerText.replace(' ↗', '')).join('\n');
+             navigator.clipboard.writeText(text); alert("Copied list!");
+        }
+        function clearTriage() { document.getElementById('bulkTriageInput').value = ""; extractIOCs(); }
+
+        // UTILITY LOGIC STUBS
+        function formatData(t){ const a=document.getElementById('formatInput'); try{ a.value=(t==='json')?JSON.stringify(JSON.parse(a.value),null,4):a.value.replace(/(>)(<)(\/*)/g,'$1\r\n$2$3'); }catch(e){alert("Invalid Format");}}
+        function handleCodec(m){ const a=document.getElementById('codecInput'); try{ if(m==='b64d')a.value=atob(a.value); else if(m==='b64e')a.value=btoa(a.value); else if(m==='urld')a.value=decodeURIComponent(a.value); else a.value=encodeURIComponent(a.value); }catch(e){alert("Codec Error");}}
+        function parseUA(){ const u=document.getElementById('uaInput').value; document.getElementById('uaBrowser').textContent=u.match(/(Firefox|Chrome|Safari|Edge|OPR)\/[\d.]+/)?.[0]||'??'; document.getElementById('uaOS').textContent=u.match(/\(([^)]+)\)/)?.[1]||'??'; document.getElementById('uaDevice').textContent=/Mobile|Android|iPhone/i.test(u)?'Mobile':'Desktop'; }
+        function identifyHash(){ 
+            const val = document.getElementById('hashInput').value.trim();
+            const l=val.length; const m={32:'MD5',40:'SHA1',64:'SHA256',128:'SHA512'}; 
+            document.getElementById('hashResult').textContent= val ? (m[l]||'Unknown Type') : 'Auto-Detect Type'; 
+        }
+        document.getElementById('hashInput').addEventListener('input', identifyHash);
+        
+        function showRegex(){ const p={'email':'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}','ip':'\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b','url':'https?:\\/\\/[^\\s/$.?#].[^\\s]*'}; document.getElementById('regexOutput').textContent=p[document.getElementById('regexSelect').value]||''; }
+        function lookupAzure(){ const c=document.getElementById('azureInput').value; const m={'50012':'Auth Failed (MFA Required)','50126':'Invalid Username/Password','53003':'Blocked by Conditional Access'}; document.getElementById('azureResult').textContent=m[c]||'Code unknown.'; }
+        function lookupRansom(){ const e=document.getElementById('ransomInput').value.toLowerCase(); const m={'.lockbit':'LockBit','.wnry':'WannaCry','.play':'Play','.alphv':'BlackCat','.encrypted':'Generic Ransom'}; document.getElementById('ransomResult').textContent=m[e]||'Unknown extension.'; }
+        function decodeJWT(){ try{ const t=document.getElementById('jwtInput').value; const b=JSON.parse(decodeURIComponent(window.atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''))); document.getElementById('jwtResult').textContent=JSON.stringify(b,null,2); }catch(e){document.getElementById('jwtResult').textContent="Invalid Token Signature/Payload";}}
+        function handleDefang(m){ const a=document.getElementById('defangInput'); a.value=(m==='defang')?a.value.replace(/http/gi,'hXXp').replace(/\./g,'[.]'):a.value.replace(/hXXp/gi,'http').replace(/\[\.\]/g,'.'); }
+        function calcSubnet(){ try{ const c=document.getElementById('cidrInput').value.split('/'); document.getElementById('subnetResult').innerHTML=`Mask: /${c[1]}<br>Hosts: ${Math.pow(2,32-c[1])-2}<br>Type: IPv4 Unicast`; }catch(e){alert("Invalid CIDR");}}
+        function convertEpoch(){ try{ document.getElementById('epochResult').textContent=new Date(document.getElementById('epochInput').value*1000).toUTCString(); }catch(e){alert("Error");}}
+        function mockCVELookup(){ document.getElementById('cveResult').classList.remove('hidden'); }
+        
+        // --- API INTEGRATION LOGIC ---
+        
+        // Settings & Badges
+        function saveKeys() { 
+            localStorage.setItem('vtKey', document.getElementById('vtKeyInput').value); 
+            localStorage.setItem('hibpKey', document.getElementById('hibpKeyInput').value); 
+            alert("API Configuration Saved to LocalStorage!"); 
+            updateBadges();
+        }
+        function clearKeys() { 
+            localStorage.removeItem('vtKey'); localStorage.removeItem('hibpKey'); 
+            document.getElementById('vtKeyInput').value = ''; document.getElementById('hibpKeyInput').value = '';
+            alert("API Configuration Purged."); 
+            updateBadges();
+        }
+        function updateBadges() { 
+            const vtState = localStorage.getItem('vtKey') ? 'Live API' : 'Mock';
+            const hibpState = localStorage.getItem('hibpKey') ? 'Live API' : 'Mock';
+            document.querySelectorAll('.vtBadge').forEach(el => el.textContent = vtState);
+            document.querySelectorAll('.hibpBadge').forEach(el => el.textContent = hibpState);
+            
+            // Populate inputs if keys exist on load
+            if(localStorage.getItem('vtKey')) document.getElementById('vtKeyInput').value = localStorage.getItem('vtKey');
+            if(localStorage.getItem('hibpKey')) document.getElementById('hibpKeyInput').value = localStorage.getItem('hibpKey');
+        }
+
+        // Live IP Lookup (VirusTotal)
+        async function runIPLookup(){ 
+            const ip = document.getElementById('ipInput').value; if(!ip) return;
+            const resDiv = document.getElementById('mockIpResult'); resDiv.classList.remove('hidden');
+            const vtKey = localStorage.getItem('vtKey');
+            
+            if(vtKey) {
+                try {
+                    document.getElementById('resRep').textContent="Loading..."; document.getElementById('resClass').textContent="..."; document.getElementById('resLoc').textContent="..."; document.getElementById('resPorts').textContent="...";
+                    const response = await fetch(`https://www.virustotal.com/api/v3/ip_addresses/${ip}`, { headers: { 'x-apikey': vtKey }});
+                    if(!response.ok) throw new Error("API/CORS");
+                    const data = await response.json();
+                    const stats = data.data.attributes.last_analysis_stats;
+                    document.getElementById('resLoc').textContent = data.data.attributes.country || 'Unknown';
+                    document.getElementById('resRep').textContent = `${stats.malicious}/${stats.malicious + stats.harmless + stats.undetected}`;
+                    document.getElementById('resClass').textContent = stats.malicious > 0 ? "Malicious" : "Clean";
+                    document.getElementById('resPorts').textContent = "Live VT Data retrieved.";
+                } catch(e) {
+                    document.getElementById('resRep').textContent="CORS/Err"; document.getElementById('resClass').textContent="Fallback Mock"; document.getElementById('resLoc').textContent="🇷🇺 RU"; document.getElementById('resPorts').textContent="22, 80, 443 (Mock)";
+                }
+            } else {
+                document.getElementById('resLoc').textContent="🇷🇺 RU"; document.getElementById('resRep').textContent="28/70"; document.getElementById('resClass').textContent="Malicious"; document.getElementById('resPorts').textContent="22, 80, 443 (Mock Data)"; 
+            }
+        }
+        
+        // Live Email Check (HIBP)
+        async function runEmailCheck(){ 
+            const email = document.getElementById('emailInput').value; if(!email) return;
+            const d = document.getElementById('emailResult'); d.classList.remove('hidden');
+            const hibpKey = localStorage.getItem('hibpKey');
+            
+            if(hibpKey) {
+                try {
+                    d.innerHTML=`<div class="p-3 bg-blue-50 border border-blue-200 rounded text-blue-600 font-bold text-center">Checking API...</div>`;
+                    const response = await fetch(`https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=false`, { headers: { 'hibp-api-key': hibpKey, 'user-agent': 'SOC-Support-Dashboard' }});
+                    if(response.status === 404) {
+                        d.innerHTML=`<div class="p-3 bg-green-50 border border-green-200 rounded text-green-700 text-xs font-bold text-center">No breaches found via API!</div>`;
+                    } else if (!response.ok) {
+                        throw new Error("API/CORS");
+                    } else {
+                        const data = await response.json();
+                        d.innerHTML=`<div class="p-3 bg-red-50 border border-red-200 rounded text-red-600 font-bold text-center">⚠️ Found in ${data.length} Breaches via API</div>`;
+                    }
+                } catch(e) {
+                    d.innerHTML=`<div class="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-xs font-bold text-center">CORS Blocked. Mock: ⚠️ Pwned in 3 Breaches</div>`;
+                }
+            } else {
+                d.innerHTML=`<div class="p-3 bg-red-50 border border-red-200 rounded text-red-600 font-bold text-center">⚠️ Found in 3 Data Breaches (Mock Data)</div>`;
+            }
+        }
+        
+        // Live Hash Rep (VirusTotal)
+        async function runHashRep(){ 
+            const hash = document.getElementById('hashInput').value.trim(); if(!hash) return;
+            const d = document.getElementById('hashResultContainer'); d.classList.remove('hidden');
+            const vtKey = localStorage.getItem('vtKey');
+            
+            if(vtKey) {
+                try {
+                    d.innerHTML=`<div class="p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 text-xs font-bold text-center">Querying VirusTotal...</div>`;
+                    const response = await fetch(`https://www.virustotal.com/api/v3/files/${hash}`, { headers: { 'x-apikey': vtKey }});
+                    if(!response.ok) throw new Error("API/CORS");
+                    const data = await response.json();
+                    const stats = data.data.attributes.last_analysis_stats;
+                    const threatLabel = data.data.attributes.meaningful_name || 'Unknown Payload';
+                    d.innerHTML=`<div class="p-3 ${stats.malicious > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'} border rounded text-xs font-bold text-center">${threatLabel}: ${stats.malicious}/${stats.malicious + stats.harmless + stats.undetected}</div>`;
+                } catch (e) {
+                    d.innerHTML=`<div class="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-xs font-bold text-center">CORS Blocked. Mock: Emotet Payload: 58/70</div>`;
+                }
+            } else {
+                d.innerHTML=`<div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-bold text-center">Emotet Payload: 58/70 detections (Mock Data)</div>`;
+            }
+        }
+
+        // Init Badges on load
+        updateBadges();
+
+        // PORTS GRID INITIALIZATION
+        const portList = [{p:21,s:'FTP'},{p:22,s:'SSH'},{p:80,s:'HTTP'},{p:443,s:'HTTPS'},{p:445,s:'SMB'},{p:3389,s:'RDP'},{p:53,s:'DNS'},{p:25,s:'SMTP'},{p:1433,s:'MSSQL'},{p:3306,s:'MySQL'},{p:5900,s:'VNC'},{p:5985,s:'WinRM'},{p:161,s:'SNMP'},{p:389,s:'LDAP'},{p:8080,s:'Proxy'},{p:23,s:'Telnet'}];
+        document.getElementById('portGrid').innerHTML = portList.map(x => `<div class="p-2 bg-slate-100 dark:bg-slate-900 rounded text-center border dark:border-slate-700"><div class="text-xs font-bold text-indigo-500">${x.p}</div><div class="text-[9px] dark:text-slate-400 font-bold uppercase">${x.s}</div></div>`).join('');
+        function searchPorts(){ const t=document.getElementById('portSearch').value.toLowerCase(); document.querySelectorAll('#portGrid > div').forEach(d=>d.style.display=d.textContent.toLowerCase().includes(t)?'block':'none'); }
+
+        // NMAP PARSER LOGIC
+        document.getElementById('nmap-upload').addEventListener('change', function(e) {
+            const r=new FileReader(); r.onload=function(){
+                const h=new DOMParser().parseFromString(r.result,"text/xml").getElementsByTagName("host");
+                const b=document.getElementById('nmap-tbody'); b.innerHTML='';
+                Array.from(h).forEach(o=>{ const a=o.getElementsByTagName("address")[0].getAttribute("addr"); Array.from(o.getElementsByTagName("port")).forEach(p=>{ b.innerHTML+=`<tr class="hover:bg-slate-50 dark:hover:bg-slate-800"><td class="p-3 font-mono text-xs">${a}</td><td class="p-3 text-indigo-500 font-bold text-xs">${p.getAttribute("portid")}</td><td class="p-3 font-medium text-xs">${p.getElementsByTagName("service")[0]?.getAttribute("name")||'-'}</td><td class="p-3 text-slate-500 text-xs">${p.getElementsByTagName("service")[0]?.getAttribute("product")||'-'}</td></tr>`; }); });
+                document.getElementById('nmap-results').classList.remove('hidden');
+            }; r.readAsText(e.target.files[0]);
+        });
+
+        // HISTORY FORENSICS LOGIC
+        let SQL, chart; initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` }).then(m => SQL = m);
+        document.getElementById('db-upload').addEventListener('change', e => {
+            const r=new FileReader(); r.onload=()=>{
+                const d=new SQL.Database(new Uint8Array(r.result));
+                const res=d.exec("SELECT url, visit_count, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 500");
+                const b=document.getElementById('history-table-body'); b.innerHTML='';
+                const h=Array(24).fill(0);
+                if(res[0]) res[0].values.forEach((o,i)=>{ 
+                    const date=new Date((o[2]-11644473600000000)/1000); h[date.getHours()]++;
+                    b.innerHTML+=`<tr><td class="px-6 py-4 font-mono text-slate-400 text-xs">${i+1}</td><td class="px-6 py-4 truncate max-w-xs font-medium text-xs">${o[0]}</td><td class="px-6 py-4 text-slate-400 text-xs">-</td><td class="px-6 py-4 text-center text-indigo-500 font-bold text-xs">${o[1]}</td><td class="px-6 py-4 text-xs text-slate-400">${date.toLocaleString()}</td></tr>`; 
+                });
+                document.getElementById('data-section').classList.remove('hidden'); document.getElementById('upload-section').classList.add('hidden');
+                if(chart) chart.destroy(); chart=new Chart(document.getElementById('activityChart'),{type:'bar',data:{labels:Array.from({length:24},(_,i)=>i+":00"),datasets:[{label:'Activity',data:h,backgroundColor:'#3b82f6',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{grid:{color:'#334155'}},x:{grid:{display:false}}}}});
+            }; r.readAsArrayBuffer(e.target.files[0]);
+        });
+
+        // NOTEPAD PERSISTENCE & EXPORT
+        const pad = document.getElementById('scratchpad'); pad.value = localStorage.getItem('hubNotes') || '';
+        pad.addEventListener('input', () => localStorage.setItem('hubNotes', pad.value));
+        document.getElementById('notepadHeader').addEventListener('click', () => document.getElementById('notepadWidget').classList.toggle('minimized'));
+        function exportNotes() { const b=new Blob([pad.value],{type:'text/markdown'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='case_notes.md'; a.click(); }
+    </script>
+</body>
+</html>
